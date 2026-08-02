@@ -32,7 +32,7 @@ Processed `100,000` Parquet files, exactly `1,000,000,000,000` rows of weather d
 
 The Batch run used `120 x 4`-vCPU workers with `12` concurrent file reads per worker. At most `24` workers ran simultaneously (becaus of the quota). All `120` workers and the reducer succeeded on their first attempt. Configured retry policies (because of spot) were three worker attempts and two reducer attempts.
 
-### Tried the new cpu C8g with the same shape
+### Batch run with the new C8g cpu
 
 | Metric | C7g run | C8g run |
 |---|---:|---:|
