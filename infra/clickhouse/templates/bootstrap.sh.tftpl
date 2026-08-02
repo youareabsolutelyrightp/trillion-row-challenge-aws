@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+exec > >(tee -a /var/log/1trc-bootstrap.log) 2>&1
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y apt-transport-https ca-certificates curl gnupg gzip jq time
+
+curl -fsSL https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key \
+  | gpg --dearmor --yes -o /usr/share/keyrings/clickhouse-keyring.gpg
+arch="$(dpkg --print-architecture)"
+echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=$arch] https://packages.clickhouse.com/deb stable main" \
+  > /etc/apt/sources.list.d/clickhouse.list
+apt-get update
+
+export CLICKHOUSE_PASSWORD=""
+%{ if clickhouse_version != "" ~}
+apt-get install -y \
+  "clickhouse-common-static=${clickhouse_version}" \
+  "clickhouse-client=${clickhouse_version}" \
+  "clickhouse-server=${clickhouse_version}"
+%{ else ~}
+apt-get install -y clickhouse-common-static clickhouse-client clickhouse-server
+%{ endif ~}
+
+cat > /etc/clickhouse-server/config.d/1trc-cluster.xml <<'XML'
+<clickhouse>
+  <listen_host>0.0.0.0</listen_host>
+  <remote_servers>
+    <one_trc>
+%{ for host in cluster_private_ips ~}
+      <shard>
+        <internal_replication>false</internal_replication>
+        <replica>
+          <host>${host}</host>
+          <port>9000</port>
+          <user>default</user>
+        </replica>
+      </shard>
+%{ endfor ~}
+    </one_trc>
+  </remote_servers>
+</clickhouse>
+XML
+
+cat > /etc/clickhouse-server/users.d/1trc-default-user.xml <<'XML'
+<clickhouse>
+  <users>
+    <default>
+      <password></password>
+      <networks replace="replace">
+        <ip>127.0.0.1</ip>
+        <ip>::1</ip>
+        <ip>${vpc_cidr}</ip>
+      </networks>
+    </default>
+  </users>
+</clickhouse>
+XML
+
+systemctl enable clickhouse-server
+systemctl restart clickhouse-server
+
+for attempt in $(seq 1 60); do
+  if clickhouse-client --query "SELECT 1" >/dev/null 2>&1; then
+    clickhouse-client --query "SELECT version()" > /var/lib/1trc-clickhouse-version
+    touch /var/lib/1trc-bootstrap-complete
+    exit 0
+  fi
+  sleep 5
+done
+
+echo "ClickHouse did not become ready" >&2
+exit 1
