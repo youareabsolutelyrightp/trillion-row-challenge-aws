@@ -30,7 +30,6 @@ Processed `100,000` Parquet files, exactly `1,000,000,000,000` rows of weather d
 | Wrap-up and teardown | 106 s | 214.2 s, including 189 s of OpenTofu destroy |
 | Spot price per instance-hour | USD 0.1140 | USD 0.1950 |
 | Cost, timed window | USD 0.1998 | USD 0.1173 |
-| Cost, whole run | USD 0.3314 | USD 0.1336 |
 
 The Batch run split the files into 120 worker jobs with 4 vCPUs each, and each worker read 12 files at a time. The 96-vCPU quota allowed 24 workers to run at once, and they used about 99% of their CPU. AWS can reclaim Spot instances at any time, so workers were allowed three attempts and the reducer two. All 120 workers and the reducer succeeded on the first attempt.
 
